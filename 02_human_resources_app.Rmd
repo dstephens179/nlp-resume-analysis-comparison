@@ -1,0 +1,656 @@
+---
+title: "Human Resources"
+output:
+    flexdashboard::flex_dashboard:
+        orientation: columns
+        theme: 
+          bootswatch: "lux"
+          bg: "white"
+          fg: "white"
+          primary: "#18bc9c"
+          secondary: "#18bc9c"
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo    = FALSE,
+    message = FALSE,
+    warning = FALSE
+)
+
+# SHINY
+library(shiny)
+library(shinyjs)
+library(shinyFiles)
+
+# Getting Text from PDF/Images
+library(tesseract)
+library(pdftools)
+library(magick)
+
+# Text Analysis
+library(tidytext)
+library(SnowballC)
+
+# Visualization
+library(tidyquant)
+library(plotly)
+library(wordcloud2)
+
+# Core Analysis
+library(tidyverse)
+
+info_card <- function(
+    title, value, sub_value,
+    main_icon = "chart-line", 
+    sub_icon = "arrow-up",
+    border_color = "#18bc9c", 
+    text_color = "#18bc9c", 
+    sub_text_color = "#18bc9c"
+) {
+    
+    div(
+        class = "panel panel-default",
+        style = str_glue("padding: 20px; border-color: {border_color}; border-style: solid;"),
+        div(
+            class = str_glue("panel-body"),
+            p(class = "pull-right", icon(class = "fa-4x", main_icon), style = str_glue("color:{text_color}")),
+            h4(title),
+            h5(value),
+            p(
+                style = str_glue("color:{sub_text_color}"),
+                icon(sub_icon),
+                tags$small(sub_value)
+            )
+        )
+    )
+    
+}
+```
+
+``` {css}
+.chart-title {
+  background-color: black;
+  color: white;
+}
+
+.chart-stage {
+  background-color: black;
+}
+
+.section.sidebar {
+  background-color: black;
+}
+
+.navbar.navbar-inverse {
+  background-color: #18bc9c!important;
+  box-shadow: 3px 3px 5px black;
+}
+
+.navbar-dark .navbar-brand, .navbar.navbar-inverse .navbar-brand {
+  color:black;
+}
+
+.navbar.navbar-inverse ul.nav.navbar-nav>li.active>a {
+  color:black;
+}
+
+.dashboard-column {
+  background-color: black;
+}
+
+.section {
+  background-color: black;
+}
+
+body {
+  background-color:black;
+}
+
+.selectize-dropdown {
+  background-color:black;
+}
+.selectize-input.full {
+  background-color:black;
+}
+.selectize-input, .selectize-control.single .selectize-input.input-active {
+  background-color:black;
+}
+.selectize-dropdown .active {
+  background-color: #18bc9c;
+  color: #f2f2f2;
+}
+
+.form-control {
+    background-color:black;
+}
+.form-control:active{
+    background-color:black;
+}
+.form-control:hover{
+    background-color:black;
+}
+.form-control:focus{
+    background-color:black;
+}
+
+.datepicker {
+    background-color:black;
+}
+.datepicker .datepicker-switch:hover, .datepicker .prev:hover, .datepicker .next:hover, .datepicker tfoot tr th:hover {
+    background-color:#18bc9c;
+}
+.datepicker table tr td.day:hover {
+    background-color:#18bc9c;
+}
+.datepicker table tr td.month:hover {
+    background-color:#18bc9c;
+}
+.datepicker table tr td.year:hover {
+    background-color:#18bc9c;
+}
+
+.nav-tabs .nav-link.active, .nav-tabs>li>a.active {
+    background-color:#18bc9c;
+}
+
+.modal-content {
+  background-color: black;
+}
+
+```
+
+```{css}
+#resume_image {
+  overflow: scroll;
+}
+```
+
+
+
+# Resume Analysis
+
+## Column {.sidebar}
+
+<br>
+
+__Learning Lab 70: Introduction to NLP.__
+
+
+#### What does the app do?
+
+> Uses Natural Language Processing to detect the main skills of a job applicant. 
+
+<hr>
+
+#### Resume Controls
+
+```{r}
+
+useShinyjs(rmd = TRUE)
+
+renderUI({
+  shinyFiles::shinyFilesButton(
+    id       = "resume_file",
+    label    = "Import a Resume (PDF)",
+    title    = "Please select a File",
+    multiple = FALSE
+  )
+})
+
+shiny::sliderInput(
+  inputId = "max_width",
+  label = "Image Max Width %",
+  min = 10,
+  max = 200,
+  value = 100
+)
+
+
+# actionButton(inputId = "apply", label = "Apply", icon = icon("play"))
+# 
+# actionButton(inputId = "reset", label = "Reset", icon = icon("sync"))
+
+
+observeEvent(eventExpr = input$reset, handlerExpr = {
+  
+    shinyjs::delay(ms = 300, expr = {
+        shinyjs::click(id = "apply")
+    })
+ 
+  
+})
+
+
+```
+
+<hr>
+
+
+```{r}
+rv <- reactiveValues()
+
+volumes <- c(root='.')
+
+shinyFiles::shinyFileChoose(
+  input, 
+  id        = 'resume_file', 
+  root      = volumes, 
+  session   = session,
+  filetypes = c('pdf')
+)
+
+observe({
+  
+  print(input$resume_file)
+  
+  if (is.null(input$resume_file)) {
+    cat("No files have been selected (shinyFileChoose)")
+  } else if (is.integer(input$resume_file)) {
+    cat("No files have been selected (shinyFileChoose)")
+  } else {
+    
+    rv$file_path_tbl <- parseFilePaths(volumes, input$resume_file)
+    
+    print(rv$file_path_tbl)
+    
+    
+    # Process the Image
+    resume_image <- pdftools::pdf_convert(
+      pdf        = rv$file_path_tbl$datapath, 
+      pages      = 1,
+      filenames  = "images/resume-app.png",
+      dpi        = 600
+    )
+    
+    rv$image_path <- "images/resume-app.png"
+    
+    # OCR
+    resume_text <- tesseract::ocr(resume_image)
+    
+    # Text Processing
+    resume_tbl <- tibble(
+      resume_id = 1,
+      text      = resume_text
+    )
+    
+    ngrams_multiple_tbl <- resume_tbl %>%
+      unnest_tokens(
+        output   = word,
+        input    = text,
+        to_lower = TRUE,
+        token    = "ngrams",
+        n        = 3,
+        n_min    = 1,
+        # Passed to tokenizers::tokenize_ngrams()
+        stopwords = stop_words %>%
+          filter(!word == "r") %>%
+          pull(word)
+      )
+    
+    # TF-IDF
+    rv$ngrams_tf_tbl <- ngrams_multiple_tbl %>%
+      group_by(resume_id) %>%
+      count(word, sort = TRUE) %>%
+      ungroup() %>%
+      filter(!str_detect(word, pattern = "[0-9]")) 
+    
+    rv$ngrams_tfidf_tbl <- rv$ngrams_tf_tbl %>%
+      bind_tf_idf(
+        term     = word, 
+        document = resume_id, 
+        n        = n
+      )
+
+    
+  }
+  
+})
+
+
+
+
+```
+
+
+
+## Column
+
+<br>
+
+### Resume Image
+
+
+```{r}
+output$resume_image <- renderImage({
+
+  req(rv$file_path_tbl)
+  req(rv$file_path_tbl$datapath)
+  req(input$max_width)
+  #
+  # image_read(rv$file_path_tbl$datapath) %>%
+  #   image_scale("800")
+
+  list(
+    src   = rv$image_path,
+    style = str_glue("max-width:{input$max_width}%;")
+  )
+
+}, deleteFile = FALSE)
+
+shiny::imageOutput("resume_image")
+```
+
+## Column
+<br>
+
+### Term Frequency
+
+```{r}
+output$word_cloud <- renderWordcloud2({
+  
+  req(rv$ngrams_tfidf_tbl)
+  
+  rv$ngrams_tfidf_tbl %>%
+    select(word, n) %>%
+    rename(freq = n) %>%
+    wordcloud2(
+        size = 1.5,
+        color = palette_light() %>% unname() %>% rep(4)
+    )
+  
+})
+
+wordcloud2::wordcloud2Output("word_cloud")
+```
+
+
+# Job Description Analysis
+
+## Column {.sidebar}
+
+<br>
+
+__Learning Lab 70: Introduction to NLP.__
+
+
+#### What does the app do?
+
+> Uses Natural Language Processing to detect the main skills of a job applicant. 
+
+<hr>
+
+#### Job Description Controls
+
+```{r}
+
+
+renderUI({
+  shinyFiles::shinyFilesButton(
+    id       = "job_file",
+    label    = "Import a Job Description (PDF)",
+    title    = "Please select a File",
+    multiple = FALSE
+  )
+})
+
+shiny::sliderInput(
+  inputId = "max_width_job",
+  label = "Image Max Width %",
+  min = 10,
+  max = 200,
+  value = 100
+)
+
+
+# actionButton(inputId = "apply", label = "Apply", icon = icon("play"))
+# 
+# actionButton(inputId = "reset", label = "Reset", icon = icon("sync"))
+
+
+
+```
+
+
+
+
+<hr>
+
+
+```{r}
+rv <- reactiveValues()
+
+volumes <- c(root='.')
+
+shinyFiles::shinyFileChoose(
+  input, 
+  id        = 'job_file', 
+  root      = volumes, 
+  session   = session,
+  filetypes = c('pdf')
+)
+
+observe({
+  
+  print(input$job_file)
+  
+  if (is.null(input$job_file)) {
+    cat("No files have been selected (shinyFileChoose)")
+  } else if (is.integer(input$job_file)) {
+    cat("No files have been selected (shinyFileChoose)")
+  } else {
+    
+    rv$job_file_path_tbl <- parseFilePaths(volumes, input$job_file)
+    
+    print(rv$job_file_path_tbl)
+    
+    
+    # Process the Image
+    job_image <- pdftools::pdf_convert(
+      pdf        = rv$job_file_path_tbl$datapath, 
+      pages      = 1,
+      filenames  = "images/job-app.png",
+      dpi        = 600
+    )
+    
+    rv$job_image_path <- "images/job-app.png"
+    
+    # OCR
+    job_text <- tesseract::ocr(job_image)
+    
+    # Text Processing
+    job_tbl <- tibble(
+      job_id = 1,
+      text      = job_text
+    )
+    
+    ngrams_job_tbl <- job_tbl %>%
+      unnest_tokens(
+        output   = word,
+        input    = text,
+        to_lower = TRUE,
+        token    = "ngrams",
+        n        = 3,
+        n_min    = 1,
+        # Passed to tokenizers::tokenize_ngrams()
+        stopwords = stop_words %>%
+          filter(!word == "r") %>%
+          pull(word)
+      )
+    
+    # TF-IDF
+    rv$ngrams_job_tf_tbl <- ngrams_job_tbl %>%
+      group_by(job_id) %>%
+      count(word, sort = TRUE) %>%
+      ungroup() %>%
+      filter(!str_detect(word, pattern = "[0-9]")) 
+    
+    rv$ngrams_job_tfidf_tbl <- rv$ngrams_job_tf_tbl %>%
+      bind_tf_idf(
+        term     = word, 
+        document = job_id, 
+        n        = n
+      )
+
+    
+  }
+  
+})
+
+
+
+
+```
+
+
+
+## Column
+
+<br>
+
+### Job Description Image
+
+
+```{r}
+output$job_image <- renderImage({
+
+  req(rv$job_file_path_tbl)
+  req(rv$job_file_path_tbl$datapath)
+  req(input$max_width_job)
+  #
+  # image_read(rv$file_path_tbl$datapath) %>%
+  #   image_scale("800")
+
+  list(
+    src   = rv$job_image_path,
+    style = str_glue("max-width:{input$max_width_job}%;")
+  )
+
+}, deleteFile = FALSE)
+
+shiny::imageOutput("job_image")
+```
+
+## Column
+<br>
+
+### Term Frequency
+
+```{r}
+output$word_cloud_job <- renderWordcloud2({
+  
+  req(rv$ngrams_job_tfidf_tbl)
+  
+  rv$ngrams_job_tfidf_tbl %>%
+    select(word, n) %>%
+    rename(freq = n) %>%
+    wordcloud2(
+        size = 1.5,
+        color = palette_light() %>% unname() %>% rep(4)
+    )
+  
+})
+
+wordcloud2::wordcloud2Output("word_cloud_job")
+```
+
+
+# Similarity Results
+
+## Column
+
+<br>
+
+### Similarity Results
+
+```{r}
+output$prt <- shiny::renderText({
+
+  req(rv$ngrams_tf_tbl)
+  req(rv$ngrams_job_desc_tf_tbl)
+
+  # * Combine the data ----
+  doc_tf_tbl <- bind_rows(
+      rv$ngrams_tf_tbl %>%
+          mutate(doc_id = 1) %>%
+          select(doc_id, word, n) %>%
+          slice(1:100)
+      ,
+
+      rv$ngrams_job_desc_tf_tbl %>%
+          mutate(doc_id = 2) %>%
+          select(doc_id, word, n) %>%
+          slice(1:100)
+  )
+
+  # * Convert to Wide ----
+  doc_tf_wide_tbl <- doc_tf_tbl %>%
+      pivot_wider(
+          id_cols     = word,
+          names_from  = doc_id,
+          values_from = n,
+          values_fill = 0,
+          names_prefix = "doc_"
+      )
+
+  # * Calculate Cosine Similarity
+
+  doc_tf_wide_tbl %>%
+      select(-word) %>%
+      as.matrix() %>%
+      lsa::cosine()
+
+})
+
+shiny::verbatimTextOutput("prt")
+```
+
+
+## Column
+
+<br>
+
+### Plots
+
+#### Resume
+
+```{r}
+output$word_cloud_2 <- renderWordcloud2({
+
+  req(rv$ngrams_tfidf_tbl)
+
+  rv$ngrams_tfidf_tbl %>%
+    select(word, n) %>%
+    rename(freq = n) %>%
+    wordcloud2(
+        size = 1.5,
+        color = palette_light() %>% unname() %>% rep(4)
+    )
+
+})
+
+wordcloud2::wordcloud2Output("word_cloud_2")
+```
+
+#### Job Description
+
+```{r}
+output$word_cloud_job_2 <- renderWordcloud2({
+
+  req(rv$ngrams_tfidf_tbl)
+
+  rv$ngrams_job_tfidf_tbl %>%
+    select(word, n) %>%
+    rename(freq = n) %>%
+    wordcloud2(
+        size = 1.5,
+        color = palette_light() %>% unname() %>% rep(4)
+    )
+
+})
+
+wordcloud2::wordcloud2Output("word_cloud_job_2")
+```
+
+

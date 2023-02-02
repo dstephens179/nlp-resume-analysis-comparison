@@ -1,0 +1,365 @@
+---
+title: "NLP Resume & Job Description Analysis & Similarity"
+---
+
+
+# LIBRARIES
+```{r}
+# Getting Text from PDF/Images
+library(tesseract)
+library(pdftools)
+library(magick)
+library(pdftools)
+
+# Text Analysis
+library(tidytext)
+library(SnowballC)
+
+# Similarity
+library(lsa) # cosine() function
+
+# Visualization
+library(tidyquant)
+library(plotly)
+library(wordcloud2)
+
+# Core Analysis
+library(tidyverse)
+```
+
+
+
+
+# 1.0 IMPORT RAW FILES
+## PNG Images of PDF 
+```{r}
+resume_image <- pdftools::pdf_convert(
+    pdf        = "resumes/David Stephens - Resume.pdf", 
+    filenames  = ,
+    pages      = NULL,
+    dpi        = 600)
+
+# Image Read
+image_read(resume_image) %>%
+    image_scale("800")
+```
+
+
+## Multiple resumes
+```{r}
+directory <- "resumes"
+file_list <- paste(directory, "/", list.files(directory, pattern = "*.pdf"), sep = "")
+
+multiple_resumes <- lapply(file_list, FUN = function(files) {
+    pdf_convert(files, format = "png", dpi = 600, pages = NULL, filenames = )
+    })
+```
+
+
+
+## Google tesseract ocr
+```{r}
+resume_text <- tesseract::ocr(resume_image)
+resume_text
+
+
+multiple_resume_text <- tesseract::ocr(unlist(multiple_resumes))
+```
+
+
+
+
+# 2.0 TEXT PREPROCESSING (TIDYTEXT)
+## Tokenization
+```{r}
+# convert to tibble
+resume_tbl <- tibble(
+    resume_id = 1,
+    text      = resume_text)
+
+resume_tbl
+
+
+# unigrams
+ngrams_1_tbl <- resume_tbl %>%
+    unnest_tokens(
+        output   = word,
+        input    = text,
+        to_lower = TRUE,
+        token    = "ngrams",
+        n        = 1)
+
+
+# bigrams
+ngrams_2_tbl <- resume_tbl %>%
+    unnest_tokens(
+        output   = word,
+        input    = text,
+        to_lower = TRUE,
+        token    = "ngrams",
+        n        = 2)
+```
+
+
+## Stopwords
+```{r}
+stop_words
+
+# look: don't want to filter out r
+stop_words %>% filter(word == "r")
+
+# SOLUTION 1: anti-join (remove, or filtering join) the stopwords, but keep 'r'
+ngrams_1_stop_tbl <- ngrams_1_tbl %>%
+    anti_join(stop_words %>% filter(!word == "r"))
+
+
+
+# Same filter has no effect on bigrams
+ngrams_2_tbl %>% anti_join(stop_words %>% filter(!word == "r"))
+
+# SOLUTION 2: unnest_tokens has stopwords inside, so include the filter for 'r' and pull word.
+ngrams_2_stop_tbl <- resume_tbl %>%
+    unnest_tokens(
+        output   = word,
+        input    = text,
+        to_lower = TRUE,
+        token    = "ngrams",
+        n        = 2,
+        stopwords = stop_words %>% filter(!word == "r") %>% pull(word))
+
+
+ngrams_2_stop_tbl
+```
+
+
+## Get Uni-/Bi-/Tri-Grams
+```{r}
+
+ngrams_multiple_tbl <- resume_tbl %>%
+    unnest_tokens(
+        output   = word,
+        input    = text,
+        to_lower = TRUE,
+        token    = "ngrams",
+        n        = 3,
+        n_min    = 1,
+        stopwords = stop_words %>% filter(!word == "r") %>% pull(word))
+
+ngrams_multiple_tbl
+```
+
+
+
+
+# 2.1 OPTIONAL: STEMMING
+Group similar words together, like 'analysis' and 'analytics'
+```{r}
+ngrams_1_stop_tbl %>%
+    count(word, sort = TRUE)
+
+
+ngrams_1_stop_tbl %>%
+    mutate(word_stem = wordStem(word)) %>%
+    count(word_stem, sort = TRUE)
+```
+
+
+
+
+# 3.0 TEXT ANALYSIS
+## Term Frequency
+```{r}
+
+ngrams_tf_tbl <- ngrams_multiple_tbl %>%
+    group_by(resume_id) %>%
+    count(word, sort = TRUE) %>%
+    ungroup() %>%
+    filter(!str_detect(word, pattern = "[0-9]")) 
+
+ngrams_tf_tbl %>%
+    slice(1:20)
+
+```
+
+
+## TFIDF
+term frequency, inverse document frequency
+```{r}
+# helpful with multiple documents
+ngrams_tfidf_tbl <- ngrams_tf_tbl %>%
+    bind_tf_idf(
+        term     = word, 
+        document = resume_id, 
+        n        = n
+    )
+
+ngrams_tfidf_tbl
+```
+
+
+## Visualize: bar chart
+```{r}
+# most frequent 40 words
+g <- ngrams_tfidf_tbl %>%
+    slice(1:40) %>%
+    mutate(word = fct_reorder(word, tf)) %>%
+    mutate(desc = str_glue("word: {word}
+                           term-frequency: {scales::percent(tf)}
+                           term-count: {n}")) %>%
+    ggplot(aes(word, tf, fill = tf)) +
+    geom_col(aes(text = desc)) +
+    coord_flip() +
+    scale_y_continuous(labels = scales::percent_format()) +
+    theme_tq()
+
+
+ggplotly(g)
+
+```
+
+
+## Visualize: word cloud
+```{r}
+# * Visualization - Word Cloud ----
+ngrams_tfidf_tbl %>%
+    select(word, n) %>%
+    rename(freq = n) %>%
+    wordcloud2(
+        size = 1.5,
+        color = palette_light() %>% unname() %>% rep(4)
+    )
+
+```
+
+
+
+
+# 4.0 JOB DESCRIPTION ANALYSIS
+## Images from pdf
+```{r}
+job_desc_image <- pdftools::pdf_convert(
+    pdf        = "job_descriptions/Rented - Lead Data Scientist Job Post.pdf", 
+    filenames  = "images/job_description.png",
+    pages      = NULL,
+    dpi        = 600)
+
+```
+
+
+## Google tesseract ocr
+```{r}
+job_desc_text <- tesseract::ocr(job_desc_image)
+job_desc_text
+```
+
+
+## Get Uni-/Bi-/Tri-Grams
+```{r}
+ngrams_job_desc_tbl <- tibble(
+    job_id = 1, 
+    text   = job_desc_text) %>%
+    unnest_tokens(
+        output   = word,
+        input    = text,
+        to_lower = TRUE,
+        token    = "ngrams",
+        n        = 3,
+        n_min    = 1,
+        # Passed to tokenizers::tokenize_ngrams()
+        stopwords = stop_words %>%
+            filter(!word == "r") %>%
+            pull(word))
+```
+
+
+## Term Frequency
+```{r}
+
+ngrams_job_desc_tf_tbl <- ngrams_job_desc_tbl  %>%
+    group_by(job_id) %>%
+    count(word, sort = TRUE) %>%
+    ungroup() %>%
+    filter(!str_detect(word, pattern = "[0-9]"))
+
+
+```
+
+
+
+
+# 5.0 SIMILARITY
+## Combine data
+```{r}
+doc_tf_tbl <- bind_rows(
+    
+    # resume frequency
+    ngrams_tf_tbl %>% mutate(doc_id = 1) %>% select(doc_id, word, n) %>% slice(1:100),
+    
+    # job description
+    ngrams_job_desc_tf_tbl %>% mutate(doc_id = 2) %>% select(doc_id, word, n) %>% slice(1:100))
+
+
+# pivot wider
+doc_tf_wide_tbl <- doc_tf_tbl %>%
+    pivot_wider(
+        id_cols     = word,
+        names_from  = doc_id,
+        values_from = n,
+        values_fill = 0, 
+        names_prefix = "doc_"
+    )
+```
+
+
+## Calculate cosine similarity
+```{r}
+
+doc_tf_wide_tbl %>%
+    select(-word) %>%
+    as.matrix() %>%
+    lsa::cosine()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
