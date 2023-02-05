@@ -4,7 +4,7 @@ title: "NLP Resume & Job Description Analysis & Similarity"
 
 
 # LIBRARIES
-```{r}
+```{r setup, include=FALSE}
 # Getting Text from PDF/Images
 library(tesseract)
 library(pdftools)

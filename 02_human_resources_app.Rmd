@@ -175,9 +175,6 @@ body {
 
 <br>
 
-__Learning Lab 70: Introduction to NLP.__
-
-
 #### What does the app do?
 
 > Uses Natural Language Processing to detect the main skills of a job applicant. 
@@ -206,23 +203,6 @@ shiny::sliderInput(
   max = 200,
   value = 100
 )
-
-
-# actionButton(inputId = "apply", label = "Apply", icon = icon("play"))
-# 
-# actionButton(inputId = "reset", label = "Reset", icon = icon("sync"))
-
-
-observeEvent(eventExpr = input$reset, handlerExpr = {
-  
-    shinyjs::delay(ms = 300, expr = {
-        shinyjs::click(id = "apply")
-    })
- 
-  
-})
-
-
 ```
 
 <hr>
@@ -371,8 +351,6 @@ wordcloud2::wordcloud2Output("word_cloud")
 ## Column {.sidebar}
 
 <br>
-
-__Learning Lab 70: Introduction to NLP.__
 
 
 #### What does the app do?
