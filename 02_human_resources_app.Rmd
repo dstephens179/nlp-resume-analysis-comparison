@@ -2,15 +2,17 @@
 title: "Human Resources"
 output:
     flexdashboard::flex_dashboard:
+        logo: C:/Users/Dave/Desktop/GitHub/nlp-resume-analysis-comparison/www/tns-logo-small.png
         orientation: columns
         theme: 
-          bootswatch: "lux"
-          bg: "white"
-          fg: "white"
-          primary: "#18bc9c"
-          secondary: "#18bc9c"
+            bootswatch: "lux"
+            bg: "white"
+            fg: "black"
+            primary: "#a087ae"
+            secondary: "#a087ae"
 runtime: shiny
 ---
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
@@ -40,129 +42,102 @@ library(wordcloud2)
 
 # Core Analysis
 library(tidyverse)
-
-info_card <- function(
-    title, value, sub_value,
-    main_icon = "chart-line", 
-    sub_icon = "arrow-up",
-    border_color = "#18bc9c", 
-    text_color = "#18bc9c", 
-    sub_text_color = "#18bc9c"
-) {
-    
-    div(
-        class = "panel panel-default",
-        style = str_glue("padding: 20px; border-color: {border_color}; border-style: solid;"),
-        div(
-            class = str_glue("panel-body"),
-            p(class = "pull-right", icon(class = "fa-4x", main_icon), style = str_glue("color:{text_color}")),
-            h4(title),
-            h5(value),
-            p(
-                style = str_glue("color:{sub_text_color}"),
-                icon(sub_icon),
-                tags$small(sub_value)
-            )
-        )
-    )
-    
-}
 ```
 
 ``` {css}
 .chart-title {
-  background-color: black;
-  color: white;
+  background-color: white;
+  color: black;
 }
 
 .chart-stage {
-  background-color: black;
+  background-color: white;
 }
 
 .section.sidebar {
-  background-color: black;
+  background-color: white;
 }
 
 .navbar.navbar-inverse {
-  background-color: #18bc9c!important;
-  box-shadow: 3px 3px 5px black;
+  background-color: #a087ae!important;
+  box-shadow: 3px 3px 5px white;
 }
 
 .navbar-dark .navbar-brand, .navbar.navbar-inverse .navbar-brand {
-  color:black;
+  color:white;
 }
 
 .navbar.navbar-inverse ul.nav.navbar-nav>li.active>a {
-  color:black;
+  color:white;
 }
 
 .dashboard-column {
-  background-color: black;
+  background-color: white;
 }
 
 .section {
-  background-color: black;
+  background-color: white;
 }
 
 body {
-  background-color:black;
+  background-color:white;
 }
 
 .selectize-dropdown {
-  background-color:black;
+  background-color:white;
 }
 .selectize-input.full {
-  background-color:black;
+  background-color:white;
 }
 .selectize-input, .selectize-control.single .selectize-input.input-active {
-  background-color:black;
+  background-color:white;
 }
 .selectize-dropdown .active {
-  background-color: #18bc9c;
+  background-color: #a087ae;
   color: #f2f2f2;
 }
 
 .form-control {
-    background-color:black;
+    background-color:white;
 }
 .form-control:active{
-    background-color:black;
+    background-color:white;
 }
 .form-control:hover{
-    background-color:black;
+    background-color:white;
 }
 .form-control:focus{
-    background-color:black;
+    background-color:white;
 }
 
 .datepicker {
-    background-color:black;
+    background-color:white;
 }
 .datepicker .datepicker-switch:hover, .datepicker .prev:hover, .datepicker .next:hover, .datepicker tfoot tr th:hover {
-    background-color:#18bc9c;
+    background-color:#a087ae;
 }
 .datepicker table tr td.day:hover {
-    background-color:#18bc9c;
+    background-color:#a087ae;
 }
 .datepicker table tr td.month:hover {
-    background-color:#18bc9c;
+    background-color:#a087ae;
 }
 .datepicker table tr td.year:hover {
-    background-color:#18bc9c;
+    background-color:#a087ae;
 }
 
 .nav-tabs .nav-link.active, .nav-tabs>li>a.active {
-    background-color:#18bc9c;
+    background-color:#a087ae;
 }
 
 .modal-content {
-  background-color: black;
+  background-color: white;
 }
 
 ```
 
 ```{css}
-#resume_image {
+#resume_first_page {
   overflow: scroll;
 }
 ```
@@ -173,16 +148,13 @@ body {
 
 ## Column {.sidebar}
 
-<br>
-
 #### What does the app do?
-
 > Uses Natural Language Processing to detect the main skills of a job applicant. 
 
 <hr>
 
-#### Resume Controls
 
+#### Resume Controls
 ```{r}
 
 useShinyjs(rmd = TRUE)
@@ -204,8 +176,6 @@ shiny::sliderInput(
   value = 100
 )
 ```
-
-<hr>
 
 
 ```{r}
@@ -236,18 +206,25 @@ observe({
     print(rv$file_path_tbl)
     
     
-    # Process the Image
-    resume_image <- pdftools::pdf_convert(
+    # process first page of image for preview
+    resume_first_page <- pdftools::pdf_convert(
       pdf        = rv$file_path_tbl$datapath, 
-      pages      = 1,
       filenames  = "images/resume-app.png",
-      dpi        = 600
-    )
+      pages      = 1,
+      dpi        = 600)
     
     rv$image_path <- "images/resume-app.png"
     
+    
+    # Process all pages for OCR
+    resume_full_image <- pdftools::pdf_convert(
+        pdf        = rv$file_path_tbl$datapath, 
+        filenames  = ,
+        pages      = NULL,
+        dpi        = 600)
+    
     # OCR
-    resume_text <- tesseract::ocr(resume_image)
+    resume_text <- tesseract::ocr(resume_full_image)
     
     # Text Processing
     resume_tbl <- tibble(
@@ -264,10 +241,7 @@ observe({
         n        = 3,
         n_min    = 1,
         # Passed to tokenizers::tokenize_ngrams()
-        stopwords = stop_words %>%
-          filter(!word == "r") %>%
-          pull(word)
-      )
+        stopwords = stop_words %>% filter(!word == "r") %>% pull(word))
     
     # TF-IDF
     rv$ngrams_tf_tbl <- ngrams_multiple_tbl %>%
@@ -287,28 +261,19 @@ observe({
   }
   
 })
-
-
-
-
 ```
-
 
 
 ## Column
 
-<br>
-
-### Resume Image
-
-
+### Resume Preview (page 1 only)
 ```{r}
-output$resume_image <- renderImage({
+output$resume_first_page <- renderImage({
 
   req(rv$file_path_tbl)
   req(rv$file_path_tbl$datapath)
   req(input$max_width)
-  #
+
   # image_read(rv$file_path_tbl$datapath) %>%
   #   image_scale("800")
 
@@ -319,14 +284,13 @@ output$resume_image <- renderImage({
 
 }, deleteFile = FALSE)
 
-shiny::imageOutput("resume_image")
+shiny::imageOutput("resume_first_page")
 ```
 
+
 ## Column
-<br>
 
-### Term Frequency
-
+### Word Cloud
 ```{r}
 output$word_cloud <- renderWordcloud2({
   
@@ -346,12 +310,35 @@ wordcloud2::wordcloud2Output("word_cloud")
 ```
 
 
+### Top 25 Words
+```{r}
+output$plotly_1 <- renderPlotly({
+
+  req(rv$ngrams_tfidf_tbl)
+
+  rv$ngrams_tfidf_tbl %>%
+    slice(1:25) %>%
+    mutate(word = fct_reorder(word, tf)) %>%
+    mutate(desc = str_glue("word: {word}
+                           term-frequency: {scales::percent(tf)}
+                           term-count: {n}")) %>%
+    ggplot(aes(word, tf, fill = tf)) +
+    geom_col() +
+    coord_flip() +
+    scale_y_continuous(labels = scales::percent_format()) +
+    theme_tq()
+
+})
+
+plotlyOutput(outputId = "plotly_1")
+```
+
+
+
+
 # Job Description Analysis
-
 ## Column {.sidebar}
-
 <br>
-
 
 #### What does the app do?
 
@@ -359,11 +346,9 @@ wordcloud2::wordcloud2Output("word_cloud")
 
 <hr>
 
+
 #### Job Description Controls
-
 ```{r}
-
-
 renderUI({
   shinyFiles::shinyFilesButton(
     id       = "job_file",
@@ -380,20 +365,7 @@ shiny::sliderInput(
   max = 200,
   value = 100
 )
-
-
-# actionButton(inputId = "apply", label = "Apply", icon = icon("play"))
-# 
-# actionButton(inputId = "reset", label = "Reset", icon = icon("sync"))
-
-
-
 ```
-
-
-
-
-<hr>
 
 
 ```{r}
@@ -424,23 +396,30 @@ observe({
     print(rv$job_file_path_tbl)
     
     
-    # Process the Image
+    # process first page of image for preview
     job_image <- pdftools::pdf_convert(
       pdf        = rv$job_file_path_tbl$datapath, 
       pages      = 1,
       filenames  = "images/job-app.png",
-      dpi        = 600
-    )
+      dpi        = 600)
     
     rv$job_image_path <- "images/job-app.png"
     
+    
+    # Process all pages for OCR
+    job_full_image <- pdftools::pdf_convert(
+        pdf        = rv$job_file_path_tbl$datapath, 
+        filenames  = ,
+        pages      = NULL,
+        dpi        = 600)
+    
     # OCR
-    job_text <- tesseract::ocr(job_image)
+    job_text <- tesseract::ocr(job_full_image)
     
     # Text Processing
     job_tbl <- tibble(
       job_id = 1,
-      text      = job_text
+      text   = job_text
     )
     
     ngrams_job_tbl <- job_tbl %>%
@@ -451,11 +430,8 @@ observe({
         token    = "ngrams",
         n        = 3,
         n_min    = 1,
-        # Passed to tokenizers::tokenize_ngrams()
-        stopwords = stop_words %>%
-          filter(!word == "r") %>%
-          pull(word)
-      )
+        stopwords = stop_words %>% filter(!word == "r") %>% pull(word))
+    
     
     # TF-IDF
     rv$ngrams_job_tf_tbl <- ngrams_job_tbl %>%
@@ -475,21 +451,13 @@ observe({
   }
   
 })
-
-
-
-
 ```
 
 
 
 ## Column
 
-<br>
-
-### Job Description Image
-
-
+### Job Description Preview
 ```{r}
 output$job_image <- renderImage({
 
@@ -510,11 +478,11 @@ output$job_image <- renderImage({
 shiny::imageOutput("job_image")
 ```
 
+
+
 ## Column
-<br>
 
-### Term Frequency
-
+### Word Cloud
 ```{r}
 output$word_cloud_job <- renderWordcloud2({
   
@@ -534,14 +502,17 @@ wordcloud2::wordcloud2Output("word_cloud_job")
 ```
 
 
+
+
+
+
+
+
 # Similarity Results
 
 ## Column
 
-<br>
-
 ### Similarity Results
-
 ```{r}
 output$prt <- shiny::renderText({
 
@@ -573,7 +544,6 @@ output$prt <- shiny::renderText({
       )
 
   # * Calculate Cosine Similarity
-
   doc_tf_wide_tbl %>%
       select(-word) %>%
       as.matrix() %>%
@@ -582,53 +552,6 @@ output$prt <- shiny::renderText({
 })
 
 shiny::verbatimTextOutput("prt")
-```
-
-
-## Column
-
-<br>
-
-### Plots
-
-#### Resume
-
-```{r}
-output$word_cloud_2 <- renderWordcloud2({
-
-  req(rv$ngrams_tfidf_tbl)
-
-  rv$ngrams_tfidf_tbl %>%
-    select(word, n) %>%
-    rename(freq = n) %>%
-    wordcloud2(
-        size = 1.5,
-        color = palette_light() %>% unname() %>% rep(4)
-    )
-
-})
-
-wordcloud2::wordcloud2Output("word_cloud_2")
-```
-
-#### Job Description
-
-```{r}
-output$word_cloud_job_2 <- renderWordcloud2({
-
-  req(rv$ngrams_tfidf_tbl)
-
-  rv$ngrams_job_tfidf_tbl %>%
-    select(word, n) %>%
-    rename(freq = n) %>%
-    wordcloud2(
-        size = 1.5,
-        color = palette_light() %>% unname() %>% rep(4)
-    )
-
-})
-
-wordcloud2::wordcloud2Output("word_cloud_job_2")
 ```
 
 
