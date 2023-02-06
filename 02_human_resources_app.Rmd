@@ -2,7 +2,7 @@
 title: "Human Resources"
 output:
     flexdashboard::flex_dashboard:
-        logo: C:/Users/Dave/Desktop/GitHub/nlp-resume-analysis-comparison/www/tns-logo-small.png
+        logo: www/tns-logo-small.png
         orientation: columns
         theme: 
             bootswatch: "lux"
