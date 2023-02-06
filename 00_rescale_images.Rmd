@@ -1,0 +1,14 @@
+---
+title: "Rescale Image(s)"
+---
+
+```{r}
+library(magick)
+
+# read in
+tns_logo <- image_read("www/tns-logo.png")
+print(tns_logo)
+
+# resize 
+image_scale(tns_logo, "200") %>% image_write("www/tns-logo-small.png")
+```
